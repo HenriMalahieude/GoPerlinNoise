@@ -9,11 +9,9 @@ import (
 )
 
 func main() {
-	rand.Seed(int64(time.Now().Unix()))
-
-	generateRandomGradients(3, 4)
+	generateRandomGradients(5, 5)
 	//outputGradients(10, 10)
-	generateDepthValues(20)
+	generateDepthValues(15)
 	outputToConsole()
 }
 
@@ -80,8 +78,8 @@ func generateDepthValues(resolution int) {
 
 				//Calculate "Theoretical Position"
 				pos := Vector2{
-					float64(gridX) + (float64((cX % resolution)) / float64(resolution)),
-					float64(gridY) + (float64((y % resolution)) / float64(resolution)),
+					float64(gridX) + ((float64((cX % resolution)) + 0.5) / float64(resolution)),
+					float64(gridY) + ((float64((y % resolution)) + 0.5) / float64(resolution)),
 				}
 
 				//Calculate the Distance Vectors
@@ -131,6 +129,8 @@ func outputGradients(x, y int) {
 }
 
 func generateRandomGradients(x, y int) {
+	rand.Seed(int64(time.Now().Unix()))
+
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
@@ -147,7 +147,7 @@ func generateRandomGradients(x, y int) {
 
 			for iY := 0; iY < lim; iY++ {
 				mu.Lock()
-				val := &Vector2{rand.Float64(), rand.Float64()}
+				val := &Vector2{rand.Float64()*2 - 1, rand.Float64()*2 - 1}
 				val.PUnit()
 
 				gradient_vectors[loc] = append(gradient_vectors[loc], *val) //No race conditions since this will generate
