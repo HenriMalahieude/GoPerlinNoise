@@ -116,7 +116,7 @@ func generateDepthValues(resolution int) {
 	wg.Wait()
 }
 
-func outputGradients(x, y int) {
+/*func outputGradients(x, y int) {
 	for iX := 0; iX < x; iX++ {
 		for iY := 0; iY < y; iY++ {
 			vec := gradient_vectors[iX][iY]
@@ -126,7 +126,7 @@ func outputGradients(x, y int) {
 
 		fmt.Println()
 	}
-}
+}*/
 
 func generateRandomGradients(x, y int) {
 	rand.Seed(int64(time.Now().Unix()))
