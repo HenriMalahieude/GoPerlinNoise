@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+    <body>
+
+    <h2>Multithreaded Perlin Noise using GoLang and WASM</h2>
+
+    <div style="position:relative;">
+        <canvas id="window" style="border:0px solid #000000; width:99%; height: 90%; position:fixed"></canvas>
+        <div style="position: fixed;">
+            <label for="grid">Grid (Grid x Grid): </label>
+            <input type="number" placeholder=10 id="grid" name="grid"><p></p>
+            <label for="resolution">Resolution (Resolution x Resolution):</label>
+            <input type="number" placeholder=5 id="resolution" name="resolution"><p></p>
+            <div id="p1">Info</div>
+            <div id="p2">Threads</div>
+            <button id ="Refresh">Confirm</button>
+        </div>
+    </div>
+    
+    <script src="wasm_exec.js"></script>
+    <script>
+        const go = new Go() //Note: This sets up the binding from Golang -> WASM -> JS
+        async function set(){
+            const response = await fetch("perlinnoise.wasm")
+            const buffer = await response.arrayBuffer();
+            WebAssembly.instantiate(buffer, go.importObject).then((result) => {
+                go.run(result.instance)
+            })
+        }
+
+        set()
+    </script>
+    <script src="gen.js"></script>
+
+    </body>
+</html>
