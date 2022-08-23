@@ -20,11 +20,12 @@ func main() {
 
 func wasmGetPerlin() js.Func {
 	perlFunc := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		if len(args) != 2 {
+		if len(args) != 3 {
 			return "Invalid no of arguments"
 		}
 		grid, err1 := strconv.Atoi(args[0].String())
 		res, err2 := strconv.Atoi(args[1].String())
+		smooth := args[2].Bool()
 
 		if grid == 0 || res == 0 {
 			return "Cannot accept zero"
@@ -42,7 +43,7 @@ func wasmGetPerlin() js.Func {
 			return "Unable to get document object"
 		}
 
-		width, height := float64(350), float64(200) //I have no idea why I can't get these normally, but fuck it whatever
+		width, height := float64(330), float64(200) //I have no idea why I can't get these normally, but fuck it whatever
 		totalWidthHeight := float64(grid * res)
 
 		widthStep := width / totalWidthHeight
@@ -62,26 +63,37 @@ func wasmGetPerlin() js.Func {
 		for iX := 0; iX < len(landscape); iX++ {
 			for iY := 0; iY < len(landscape[0]); iY++ {
 				val := landscape[iX][iY]
-				/*val += 1
-				val /= 2 //now scaled from 0 -> 1
+				if smooth {
+					val += 1
+					val /= 2 //now scaled from 0 -> 1
 
-				r := val
-				g := -(math.Pow(2*val, 2)) + 4*val
-				b := 1 - val*/
+					r := val
+					g := -(math.Pow(2*val, 2)) + 4*val
+					b := 1 - val
 
-				if val > 0.85 {
-					ctx.Set("fillStyle", "#FF0000")
-				} else if val > 0.5 {
-					ctx.Set("fillStyle", "#AAFF00")
-				} else if val > 0 {
-					ctx.Set("fillStyle", "#00FF00")
-				} else if val > -0.5 {
-					ctx.Set("fillStyle", "#00AAFF")
+					str := "#"
+					str += valToHex(r)
+					str += valToHex(g)
+					str += valToHex(b)
+
+					ctx.Set("fillStyle", str)
 				} else {
-					ctx.Set("fillStyle", "#0000FF")
+					if val > 0.95 {
+						ctx.Set("fillStyle", "#000000")
+					} else if val > 0.85 {
+						ctx.Set("fillStyle", "#FF0000")
+					} else if val > 0.5 {
+						ctx.Set("fillStyle", "#AAFF00")
+					} else if val > 0 {
+						ctx.Set("fillStyle", "#00FF00")
+					} else if val > -0.5 {
+						ctx.Set("fillStyle", "#00AAFF")
+					} else {
+						ctx.Set("fillStyle", "#0000FF")
+					}
 				}
 
-				ctx.Call("fillRect", float64(iX)*widthStep, float64(iY)*heightStep, widthStep, heightStep)
+				ctx.Call("fillRect", float64(iX)*widthStep, float64(iY)*heightStep, widthStep*1.5, heightStep*1.5)
 			}
 		}
 
@@ -174,10 +186,10 @@ func generateDepthValues(resolution int) {
 
 				//Get Corresponding Gradient Vectors
 				Gradients := []Vector2{
-					gradient_vectors[gridX][gridY],
-					gradient_vectors[gridX+1][gridY],
-					gradient_vectors[gridX][gridY+1],
-					gradient_vectors[gridX+1][gridY+1],
+					gradient_vectors[gridX][gridY].Unit(),
+					gradient_vectors[gridX+1][gridY].Unit(),
+					gradient_vectors[gridX][gridY+1].Unit(),
+					gradient_vectors[gridX+1][gridY+1].Unit(),
 				}
 
 				GradientPositions := []Vector2{
@@ -210,9 +222,9 @@ func generateDepthValues(resolution int) {
 				}
 
 				//Interpolate between the two.............. yeah this is fun, could've made this a function but I decided to copy my old code
-				ab := Dots[0] + ((pos.x-GradientPositions[0].x)/GradientPositions[1].Distance(GradientPositions[0]))*(Dots[1]-Dots[0])
-				cd := Dots[2] + ((pos.x-GradientPositions[2].x)/GradientPositions[3].Distance(GradientPositions[2]))*(Dots[3]-Dots[2])
-				finalValue := ab + ((pos.y-GradientPositions[0].y)/GradientPositions[2].Distance(GradientPositions[0]))*(cd-ab)
+				ab := interpolate(Dots[0], Dots[1], (pos.x-GradientPositions[0].x)/(GradientPositions[1].x-GradientPositions[0].x))
+				cd := interpolate(Dots[2], Dots[3], (pos.x-GradientPositions[0].x)/(GradientPositions[1].x-GradientPositions[0].x))
+				finalValue := interpolate(ab, cd, (pos.y-GradientPositions[0].y)/(GradientPositions[2].y-GradientPositions[0].y))
 				if math.IsNaN(finalValue) {
 					finalValue = 0
 				}
@@ -225,6 +237,10 @@ func generateDepthValues(resolution int) {
 	}
 
 	wg.Wait()
+}
+
+func interpolate(a, b, alpha float64) float64 {
+	return a + alpha*(b-a)
 }
 
 /*func outputGradients(x, y int) {
@@ -258,10 +274,9 @@ func generateRandomGradients(x, y int) {
 
 			for iY := 0; iY < lim; iY++ {
 				mu.Lock()
-				val := &Vector2{rand.Float64()*2 - 1, rand.Float64()*2 - 1}
-				val.PUnit()
+				val := Vector2{rand.Float64()*2 - 1, rand.Float64()*2 - 1}
 
-				gradient_vectors[loc] = append(gradient_vectors[loc], *val) //No race conditions since this will generate
+				gradient_vectors[loc] = append(gradient_vectors[loc], val.Unit()) //No race conditions since this will generate
 				mu.Unlock()
 			}
 
