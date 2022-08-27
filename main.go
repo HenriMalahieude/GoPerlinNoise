@@ -11,14 +11,14 @@ func main() {
 	fmt.Println("Go Web Assembly Is Now Running!")
 	js.Global().Set("genPerlin", wasmGetPerlin())
 
-	//Indefinite Wait
+	//Indefinite Wait, I hope WebAssembly levels up to not need this... come on.
 	<-make(chan bool)
 }
 
 func wasmGetPerlin() js.Func {
 	perlFunc := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
 		if len(args) != 5 {
-			return "Invalid no of arguments"
+			return "Invalid no. of arguments, expected 5"
 		}
 		grid, err1 := strconv.Atoi(args[0].String())
 		res, err2 := strconv.Atoi(args[1].String())
@@ -26,8 +26,8 @@ func wasmGetPerlin() js.Func {
 		extreme := args[3].Bool()
 		terrain := args[4].Bool()
 
-		if grid == 0 || res == 0 {
-			return "Cannot accept zero"
+		if grid <= 0 || res <= 0 {
+			return "Cannot accept grid/res <= zero"
 		}
 
 		if err1 != nil || err2 != nil {
@@ -39,10 +39,11 @@ func wasmGetPerlin() js.Func {
 
 		jsDoc := js.Global().Get("document")
 		if !jsDoc.Truthy() {
-			return "Unable to get document object"
+			return "Unable to get document"
 		}
 
-		width, height := float64(330), float64(200) //I have no idea why I can't get these normally, but fuck it whatever
+		//I have no idea why I can't get these normally, but fuck it whatever I barely researched it and will proceed to not research it
+		width, height := float64(330), float64(200)
 		totalWidthHeight := float64(grid * res)
 
 		widthStep := width / totalWidthHeight
@@ -55,7 +56,7 @@ func wasmGetPerlin() js.Func {
 
 		ctx := canv.Call("getContext", "2d")
 		if !ctx.Truthy() {
-			return "Unable to get context"
+			return "Unable to get drawing tool"
 		}
 
 		//BTW, the only reason I'm drawing from within here is because I can't send an array through for SOME FUCKING REASON
@@ -92,6 +93,7 @@ func wasmGetPerlin() js.Func {
 					}
 				}
 
+				//Why do I make them unnecessarily Big? Like 2x as big? Idk, you tell me why drawing to the canvas with floats inserts unnecessary white space in between the boxes
 				ctx.Call("fillRect", float64(iX)*widthStep, float64(iY)*heightStep, widthStep*2, heightStep*2)
 			}
 		}
@@ -102,6 +104,7 @@ func wasmGetPerlin() js.Func {
 	return perlFunc
 }
 
+// Pays to know HEX huh?
 func valToHex(v float64) (out string) {
 	let := [6]string{
 		"A",
@@ -112,6 +115,13 @@ func valToHex(v float64) (out string) {
 		"F",
 	}
 	var nVal int = int(v * 255.0)
+
+	//Did you know? math.Max and math.Min only accept floats? You'd think they'd switched to generics by now.........
+	if nVal < 0 {
+		nVal = 0
+	} else if nVal > 255 {
+		nVal = 255
+	}
 
 	secDig := 0
 
@@ -134,5 +144,5 @@ func valToHex(v float64) (out string) {
 
 	//fmt.Println(out)
 
-	return
+	return //2 Tbsp of Syntactical Sugar
 }

@@ -7,18 +7,20 @@ import (
 	"time"
 )
 
+// Create a grid x by y units of gradient vectors (extreme means unit vector or random 0 -> 1 size)
 func generateRandomGradients(x, y int, extreme bool) {
-	x += 1
+	x += 1 //This is for it to generate a "square", and not just 1 vector (a grid consists of 4 vectors)
 	y += 1
 
+	//Ensure the seed is complete
 	rand.Seed(int64(time.Now().Unix()))
 
 	var wg sync.WaitGroup
-	var mu sync.Mutex
+	var mu sync.Mutex //Imagine needing this, Imagine not using Rust, Wait...
 
 	//Quickly Generate the gradients
-	gradient_vectors = nil
-	wg.Add(x)
+	gradient_vectors = nil //Give back to your Garbage Collector, he needs meals
+	wg.Add(x)              //Doesn't really matter where it's put
 	for iX := 0; iX < x; iX++ {
 		mu.Lock()
 		gradient_vectors = append(gradient_vectors, []Vector2{})
@@ -28,13 +30,13 @@ func generateRandomGradients(x, y int, extreme bool) {
 			defer w.Done()
 
 			for iY := 0; iY < lim; iY++ {
-				mu.Lock()
 				val := Vector2{rand.Float64()*2 - 1, rand.Float64()*2 - 1}.Unit()
 				scale := 1.0
 				if extreme {
 					scale = rand.Float64()
 				}
 
+				mu.Lock()
 				gradient_vectors[loc] = append(gradient_vectors[loc], val.Scale(scale)) //No race conditions since this will generate
 				mu.Unlock()
 			}
@@ -54,7 +56,7 @@ func generateDepthValues(resolution int, terrain bool) {
 	length := (len(gradient_vectors) - 1) * resolution
 	height := (len(gradient_vectors[0]) - 1) * resolution
 
-	landscape = nil
+	landscape = nil //Give back to your fellow garbage collector, he needs to eat too!
 
 	for x := 0; x < length; x++ {
 		mu.Lock()
@@ -99,7 +101,7 @@ func generateDepthValues(resolution int, terrain bool) {
 						GradientPositions[1].Sub(pos).Unit(),
 						GradientPositions[2].Sub(pos).Unit(),
 						GradientPositions[3].Sub(pos).Unit(),*/
-						pos.Sub(GradientPositions[0]).Unit(),
+						pos.Sub(GradientPositions[0]).Unit(), //If terrain mode, then the main "smoothness" comes from the interpolation function
 						pos.Sub(GradientPositions[1]).Unit(),
 						pos.Sub(GradientPositions[2]).Unit(),
 						pos.Sub(GradientPositions[3]).Unit(),
@@ -115,13 +117,14 @@ func generateDepthValues(resolution int, terrain bool) {
 
 				//Calculate the Dot Products
 				Dots := []float64{
-					DistanceVectors[0].Dot(Gradients[0]),
-					DistanceVectors[1].Dot(Gradients[1]),
+					DistanceVectors[0].Dot(Gradients[0]), //Think of this like a Boost Pad from Mario kart, Same Direction = 1, Opposite Direction = -1, Perpendicular = 0
+					DistanceVectors[1].Dot(Gradients[1]), //Of course that's for unit vector dots otherwise Same Direction = (+), Opposite Direction = (-), Perpendicular = 0
 					DistanceVectors[2].Dot(Gradients[2]),
 					DistanceVectors[3].Dot(Gradients[3]),
 				}
 
 				//Interpolate between the two.............. yeah this is fun, could've made this a function but I decided to copy my old code
+				//Welp, this is me from the future, I made it a function....
 				ab := interpolate(Dots[0], Dots[1], (pos.x-GradientPositions[0].x)/(GradientPositions[1].x-GradientPositions[0].x))
 				cd := interpolate(Dots[2], Dots[3], (pos.x-GradientPositions[0].x)/(GradientPositions[1].x-GradientPositions[0].x))
 				finalValue := interpolate(ab, cd, (pos.y-GradientPositions[0].y)/(GradientPositions[2].y-GradientPositions[0].y))
@@ -143,6 +146,7 @@ func interpolate(a, b, alpha float64) float64 {
 	return a + alpha*(b-a)
 }
 
+//Welcome to Command Line Testing, a wide world of entertaining pain
 /*func outputToConsole() {
 	for iX := 0; iX < len(landscape); iX++ {
 		for iY := 0; iY < len(landscape[0]); iY++ {
