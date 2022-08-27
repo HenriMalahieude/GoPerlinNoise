@@ -3,11 +3,8 @@ package main
 import (
 	"fmt"
 	"math"
-	"math/rand"
 	"strconv"
-	"sync"
 	"syscall/js"
-	"time"
 )
 
 func main() {
@@ -20,12 +17,14 @@ func main() {
 
 func wasmGetPerlin() js.Func {
 	perlFunc := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		if len(args) != 3 {
+		if len(args) != 5 {
 			return "Invalid no of arguments"
 		}
 		grid, err1 := strconv.Atoi(args[0].String())
 		res, err2 := strconv.Atoi(args[1].String())
 		smooth := args[2].Bool()
+		extreme := args[3].Bool()
+		terrain := args[4].Bool()
 
 		if grid == 0 || res == 0 {
 			return "Cannot accept zero"
@@ -35,8 +34,8 @@ func wasmGetPerlin() js.Func {
 			return "Couldn't convert to numbers"
 		}
 
-		generateRandomGradients(grid, grid)
-		generateDepthValues(res)
+		generateRandomGradients(grid, grid, extreme)
+		generateDepthValues(res, terrain)
 
 		jsDoc := js.Global().Get("document")
 		if !jsDoc.Truthy() {
@@ -68,7 +67,7 @@ func wasmGetPerlin() js.Func {
 					val /= 2 //now scaled from 0 -> 1
 
 					r := val
-					g := -(math.Pow(2*val, 2)) + 4*val
+					g := (-(math.Pow(val, 2))+val)*5 - 0.25 //Tuned to perfection
 					b := 1 - val
 
 					str := "#"
@@ -78,22 +77,22 @@ func wasmGetPerlin() js.Func {
 
 					ctx.Set("fillStyle", str)
 				} else {
-					if val > 0.95 {
+					if val > 0.9 {
 						ctx.Set("fillStyle", "#000000")
-					} else if val > 0.85 {
+					} else if val > 0.75 {
 						ctx.Set("fillStyle", "#FF0000")
-					} else if val > 0.5 {
+					} else if val > 0.4 {
 						ctx.Set("fillStyle", "#AAFF00")
 					} else if val > 0 {
 						ctx.Set("fillStyle", "#00FF00")
-					} else if val > -0.5 {
+					} else if val > -0.6 {
 						ctx.Set("fillStyle", "#00AAFF")
 					} else {
 						ctx.Set("fillStyle", "#0000FF")
 					}
 				}
 
-				ctx.Call("fillRect", float64(iX)*widthStep, float64(iY)*heightStep, widthStep*1.5, heightStep*1.5)
+				ctx.Call("fillRect", float64(iX)*widthStep, float64(iY)*heightStep, widthStep*2, heightStep*2)
 			}
 		}
 
@@ -136,152 +135,4 @@ func valToHex(v float64) (out string) {
 	//fmt.Println(out)
 
 	return
-}
-
-func outputToConsole() {
-	for iX := 0; iX < len(landscape); iX++ {
-		for iY := 0; iY < len(landscape[0]); iY++ {
-			val := landscape[iX][iY]
-			if val >= 0.85 {
-				fmt.Print("# ")
-			} else if val >= 0.5 {
-				fmt.Print("X ")
-			} else if val >= 0 {
-				fmt.Print("+ ")
-			} else if val >= -0.5 {
-				fmt.Print("- ")
-			} else {
-				fmt.Print("  ")
-			}
-		}
-
-		fmt.Println()
-	}
-}
-
-// Resolution (Rez x Rez) represents the amount pixels/characters per square in grid
-func generateDepthValues(resolution int) {
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-
-	//Subtract 1 to avoid trying to create landscape on edge (where there are no gradient vectors)
-	length := (len(gradient_vectors) - 1) * resolution
-	height := (len(gradient_vectors[0]) - 1) * resolution
-
-	landscape = nil
-
-	for x := 0; x < length; x++ {
-		mu.Lock()
-		landscape = append(landscape, []float64{})
-		mu.Unlock()
-
-		//There ain't no way I ain't making this multi-threaded
-		wg.Add(1)
-		go func(cX, h int) {
-			defer wg.Done()
-			gridX := (cX - (cX % resolution)) / resolution
-
-			for y := 0; y < h; y++ {
-				gridY := (y - (y % resolution)) / resolution
-
-				//Get Corresponding Gradient Vectors
-				Gradients := []Vector2{
-					gradient_vectors[gridX][gridY].Unit(),
-					gradient_vectors[gridX+1][gridY].Unit(),
-					gradient_vectors[gridX][gridY+1].Unit(),
-					gradient_vectors[gridX+1][gridY+1].Unit(),
-				}
-
-				GradientPositions := []Vector2{
-					{float64(gridX), float64(gridY)},
-					{float64(gridX + 1), float64(gridY)},
-					{float64(gridX), float64(gridY + 1)},
-					{float64(gridX + 1), float64(gridY + 1)},
-				}
-
-				//Calculate "Theoretical Position"
-				pos := Vector2{
-					float64(gridX) + ((float64((cX % resolution)) + 0.5) / float64(resolution)),
-					float64(gridY) + ((float64((y % resolution)) + 0.5) / float64(resolution)),
-				}
-
-				//Calculate the Distance Vectors
-				DistanceVectors := []Vector2{
-					pos.Sub(GradientPositions[0]).Unit(),
-					pos.Sub(GradientPositions[1]).Unit(),
-					pos.Sub(GradientPositions[2]).Unit(),
-					pos.Sub(GradientPositions[3]).Unit(),
-				}
-
-				//Calculate the Dot Products
-				Dots := []float64{
-					DistanceVectors[0].Dot(Gradients[0]),
-					DistanceVectors[1].Dot(Gradients[1]),
-					DistanceVectors[2].Dot(Gradients[2]),
-					DistanceVectors[3].Dot(Gradients[3]),
-				}
-
-				//Interpolate between the two.............. yeah this is fun, could've made this a function but I decided to copy my old code
-				ab := interpolate(Dots[0], Dots[1], (pos.x-GradientPositions[0].x)/(GradientPositions[1].x-GradientPositions[0].x))
-				cd := interpolate(Dots[2], Dots[3], (pos.x-GradientPositions[0].x)/(GradientPositions[1].x-GradientPositions[0].x))
-				finalValue := interpolate(ab, cd, (pos.y-GradientPositions[0].y)/(GradientPositions[2].y-GradientPositions[0].y))
-				if math.IsNaN(finalValue) {
-					finalValue = 0
-				}
-
-				mu.Lock()
-				landscape[cX] = append(landscape[cX], finalValue)
-				mu.Unlock()
-			}
-		}(x, height)
-	}
-
-	wg.Wait()
-}
-
-func interpolate(a, b, alpha float64) float64 {
-	return a + alpha*(b-a)
-}
-
-/*func outputGradients(x, y int) {
-	for iX := 0; iX < x; iX++ {
-		for iY := 0; iY < y; iY++ {
-			vec := gradient_vectors[iX][iY]
-
-			fmt.Print("(" + fmt.Sprintf("%.2f", vec.x) + ", " + fmt.Sprintf("%.2f", vec.y) + ") ")
-		}
-
-		fmt.Println()
-	}
-}*/
-
-func generateRandomGradients(x, y int) {
-	rand.Seed(int64(time.Now().Unix()))
-
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-
-	//Quickly Generate the gradients
-	gradient_vectors = nil
-	wg.Add(x)
-	for iX := 0; iX < x; iX++ {
-		mu.Lock()
-		gradient_vectors = append(gradient_vectors, []Vector2{})
-		mu.Unlock()
-
-		go func(loc, lim int, w *sync.WaitGroup) { //Instead of Sequentially generating, we generate in parallel
-			defer w.Done()
-
-			for iY := 0; iY < lim; iY++ {
-				mu.Lock()
-				val := Vector2{rand.Float64()*2 - 1, rand.Float64()*2 - 1}
-
-				gradient_vectors[loc] = append(gradient_vectors[loc], val.Unit()) //No race conditions since this will generate
-				mu.Unlock()
-			}
-
-		}(iX, y, &wg)
-	}
-
-	wg.Wait()
 }
